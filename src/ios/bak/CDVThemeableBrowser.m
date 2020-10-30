@@ -78,7 +78,7 @@
     _callbackIdPattern = nil;
 }
 #else
-- (CDVThemeableBrowser*)initWithWebView:(WKWebView*)theWebView
+- (CDVThemeableBrowser*)initWithWebView:(UIWebView*)theWebView
 {
     self = [super initWithWebView:theWebView];
     if (self != nil) {
@@ -212,7 +212,7 @@
     // and feel that is consistent across platforms. We'd do this hack to
     // minimize changes from the original ThemeableBrowser so when merge from the
     // ThemeableBrowser is needed, it wouldn't be super pain in the ass.
-    browserOptions.toolbarposition = kThemeableBrowserToolbarBarPositionTop;
+    browserOptions.toolbarposition = kThemeableBrowserToolbarBarPositionBottom;
 
     if (browserOptions.clearcache) {
         NSHTTPCookie *cookie;
@@ -288,20 +288,16 @@
             }
         }
     }
-    
-    // Todo: options need to be updated based on WKWebView which are not directly translatable from UIWebView
 
     // UIWebView options
-    
-    //self.themeableBrowserViewController.webView.scalesPageToFit = browserOptions.zoom;
-    //self.themeableBrowserViewController.webView.mediaPlaybackRequiresUserAction = browserOptions.mediaplaybackrequiresuseraction;
-    //self.themeableBrowserViewController.webView.allowsInlineMediaPlayback = browserOptions.allowinlinemediaplayback;
-    //if (IsAtLeastiOSVersion(@"6.0")) {
-        //self.themeableBrowserViewController.webView.keyboardDisplayRequiresUserAction = browserOptions.keyboarddisplayrequiresuseraction;
-        //self.themeableBrowserViewController.webView.suppressesIncrementalRendering = browserOptions.suppressesincrementalrendering;
-   // }
+    self.themeableBrowserViewController.webView.scalesPageToFit = browserOptions.zoom;
+    self.themeableBrowserViewController.webView.mediaPlaybackRequiresUserAction = browserOptions.mediaplaybackrequiresuseraction;
+    self.themeableBrowserViewController.webView.allowsInlineMediaPlayback = browserOptions.allowinlinemediaplayback;
+    if (IsAtLeastiOSVersion(@"6.0")) {
+        self.themeableBrowserViewController.webView.keyboardDisplayRequiresUserAction = browserOptions.keyboarddisplayrequiresuseraction;
+        self.themeableBrowserViewController.webView.suppressesIncrementalRendering = browserOptions.suppressesincrementalrendering;
+    }
 
-    self.themeableBrowserViewController.webView.navigationDelegate = self;
     [self.themeableBrowserViewController navigateTo:url];
     if (!browserOptions.hidden) {
         [self show:nil withAnimation:!browserOptions.disableAnimation];
@@ -380,8 +376,7 @@
     if (!_injectedIframeBridge) {
         _injectedIframeBridge = YES;
         // Create an iframe bridge in the new document to communicate with the CDVThemeableBrowserViewController
-        
-        [self.themeableBrowserViewController.webView evaluateJavaScript:@"(function(d){var e = _cdvIframeBridge = d.createElement('iframe');e.style.display='none';d.body.appendChild(e);})(document)" completionHandler:nil];
+        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:@"(function(d){var e = _cdvIframeBridge = d.createElement('iframe');e.style.display='none';d.body.appendChild(e);})(document)"];
     }
 
     if (jsWrapper != nil) {
@@ -390,10 +385,10 @@
         if (sourceArrayString) {
             NSString* sourceString = [sourceArrayString substringWithRange:NSMakeRange(1, [sourceArrayString length] - 2)];
             NSString* jsToInject = [NSString stringWithFormat:jsWrapper, sourceString];
-            [self.themeableBrowserViewController.webView evaluateJavaScript:jsToInject completionHandler:nil];
+            [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:jsToInject];
         }
     } else {
-        [self.themeableBrowserViewController.webView evaluateJavaScript:source completionHandler:nil];
+        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:source];
     }
 }
 
@@ -475,99 +470,90 @@
  * value to pass to the callback. [NSURL path] should take care of the URL-unescaping, and a JSON_EXCEPTION
  * is returned if the JSON is invalid.
  */
+- (BOOL)webView:(UIWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
+{
+    NSURL* url = request.URL;
+    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
 
+    // See if the url uses the 'gap-iab' protocol. If so, the host should be the id of a callback to execute,
+    // and the path, if present, should be a JSON-encoded value to pass to the callback.
+    if ([[url scheme] isEqualToString:@"gap-iab"]) {
+        NSString* scriptCallbackId = [url host];
+        CDVPluginResult* pluginResult = nil;
 
-//- (BOOL)webView:(WKWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
-//{
-//    NSURL* url = request.URL;
-//    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
-//
-//    // See if the url uses the 'gap-iab' protocol. If so, the host should be the id of a callback to execute,
-//    // and the path, if present, should be a JSON-encoded value to pass to the callback.
-//    if ([[url scheme] isEqualToString:@"gap-iab"]) {
-//        NSString* scriptCallbackId = [url host];
-//        CDVPluginResult* pluginResult = nil;
-//
-//        if ([self isValidCallbackId:scriptCallbackId]) {
-//            NSString* scriptResult = [url path];
-//            NSError* __autoreleasing error = nil;
-//
-//            // The message should be a JSON-encoded array of the result of the script which executed.
-//            if ((scriptResult != nil) && ([scriptResult length] > 1)) {
-//                scriptResult = [scriptResult substringFromIndex:1];
-//                NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
-//                if ((error == nil) && [decodedResult isKindOfClass:[NSArray class]]) {
-//                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:(NSArray*)decodedResult];
-//                } else {
-//                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_JSON_EXCEPTION];
-//                }
-//            } else {
-//                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:@[]];
-//            }
-//            [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
-//            return NO;
-//        }
-//    } else if ([self isSystemUrl:url]) {
-//      // Do not allow iTunes store links from ThemeableBrowser as they do not work
-//      // instead open them with App Store app or Safari
-//      [[UIApplication sharedApplication] openURL:url];
-//
-//      // only in the case where a redirect link is opened in a freshly started
-//      // ThemeableBrowser frame, trigger ThemeableBrowserRedirectExternalOnOpen
-//      // event. This event can be handled in the app-side -- for instance, to
-//      // close the ThemeableBrowser as the frame will contain a blank page
-//      if (
-//        originalUrl != nil
-//        && [[originalUrl absoluteString] isEqualToString:[initUrl absoluteString]]
-//        && _framesOpened == 1
-//      ) {
-//        NSDictionary *event = @{
-//          @"type": @"ThemeableBrowserRedirectExternalOnOpen",
-//          @"message": @"ThemeableBrowser redirected to open an external app on fresh start"
-//        };
-//
-//        [self emitEvent:event];
-//      }
-//
-//      // do not load content in the web view since this URL is handled by an
-//      // external app
-//      return NO;
-//    } else if ((self.callbackId != nil) && isTopLevelNavigation) {
-//        // Send a loadstart event for each top-level navigation (includes redirects).
-//        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
-//                                                      messageAsDictionary:@{@"type":@"loadstart", @"url":[url absoluteString]}];
-//        [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
-//
-//        [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
-//    }
-//
-//    // originalUrl is used to detect redirect. This works by storing the
-//    // request URL of the original frame when it's about to be loaded. A redirect
-//    // will cause shouldStartLoadWithRequest to be called again before the
-//    // original frame finishes loading (originalUrl becomes nil upon the frame
-//    // finishing loading). On second time shouldStartLoadWithRequest
-//    // is called, this stored original frame's URL can be compared against
-//    // the URL of the new request. A mismatch implies redirect.
-//    originalUrl = request.URL;
-//
-//    return YES;
-//}
+        if ([self isValidCallbackId:scriptCallbackId]) {
+            NSString* scriptResult = [url path];
+            NSError* __autoreleasing error = nil;
 
-- (void)webViewDidStartLoad:(WKWebView*)theWebView
+            // The message should be a JSON-encoded array of the result of the script which executed.
+            if ((scriptResult != nil) && ([scriptResult length] > 1)) {
+                scriptResult = [scriptResult substringFromIndex:1];
+                NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
+                if ((error == nil) && [decodedResult isKindOfClass:[NSArray class]]) {
+                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:(NSArray*)decodedResult];
+                } else {
+                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_JSON_EXCEPTION];
+                }
+            } else {
+                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:@[]];
+            }
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
+            return NO;
+        }
+    } else if ([self isSystemUrl:url]) {
+      // Do not allow iTunes store links from ThemeableBrowser as they do not work
+      // instead open them with App Store app or Safari
+      [[UIApplication sharedApplication] openURL:url];
+
+      // only in the case where a redirect link is opened in a freshly started
+      // ThemeableBrowser frame, trigger ThemeableBrowserRedirectExternalOnOpen
+      // event. This event can be handled in the app-side -- for instance, to
+      // close the ThemeableBrowser as the frame will contain a blank page
+      if (
+        originalUrl != nil
+        && [[originalUrl absoluteString] isEqualToString:[initUrl absoluteString]]
+        && _framesOpened == 1
+      ) {
+        NSDictionary *event = @{
+          @"type": @"ThemeableBrowserRedirectExternalOnOpen",
+          @"message": @"ThemeableBrowser redirected to open an external app on fresh start"
+        };
+
+        [self emitEvent:event];
+      }
+
+      // do not load content in the web view since this URL is handled by an
+      // external app
+      return NO;
+    } else if ((self.callbackId != nil) && isTopLevelNavigation) {
+        // Send a loadstart event for each top-level navigation (includes redirects).
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                                                      messageAsDictionary:@{@"type":@"loadstart", @"url":[url absoluteString]}];
+        [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+    }
+
+    // originalUrl is used to detect redirect. This works by storing the
+    // request URL of the original frame when it's about to be loaded. A redirect
+    // will cause shouldStartLoadWithRequest to be called again before the
+    // original frame finishes loading (originalUrl becomes nil upon the frame
+    // finishing loading). On second time shouldStartLoadWithRequest
+    // is called, this stored original frame's URL can be compared against
+    // the URL of the new request. A mismatch implies redirect.
+    originalUrl = request.URL;
+
+    return YES;
+}
+
+- (void)webViewDidStartLoad:(UIWebView*)theWebView
 {
     _injectedIframeBridge = NO;
     _framesOpened++;
 }
 
-
-- (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
-    
-    NSURLRequest *request = navigationAction.request;
-    self.themeableBrowserViewController.currentURL = request.URL;
-    decisionHandler(WKNavigationActionPolicyAllow);
-}
-
-- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+- (void)webViewDidFinishLoad:(UIWebView*)theWebView
+{
     if (self.callbackId != nil) {
         // TODO: It would be more useful to return the URL the page is actually on (e.g. if it's been redirected).
         NSString* url = [self.themeableBrowserViewController.currentURL absoluteString];
@@ -583,8 +569,7 @@
     }
 }
 
-
-- (void)webView:(WKWebView*)theWebView didFailLoadWithError:(NSError*)error
+- (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
 {
     if (self.callbackId != nil) {
         NSString* url = [self.themeableBrowserViewController.currentURL absoluteString];
@@ -664,18 +649,11 @@
         _userAgent = userAgent;
         _prevUserAgent = prevUserAgent;
         _browserOptions = browserOptions;
-        //_webViewDelegate = [[CDVWKWebViewUIDelegate alloc] init];
-        
-
-
-//#ifdef __CORDOVA_9_0_0
-////        _webViewDelegate = [[kCDVWebViewEngineWKUIDelegate alloc] initWithDelegate:self];
-////        _webNavigationDelegate = [[kCDVWebViewEngineWKNavigationDelegate alloc] initwithDelegate:self];
-//
-////#else
-////        _webViewDelegate = [[kCDVWebViewEngineWKUIDelegate alloc] initWithDelegate:self];
-////        _webNavigationDelegate = [[kCDVWebViewEngineWKNavigationDelegate alloc] initwithDelegate:self];
-//#endif
+#ifdef __CORDOVA_4_0_0
+        _webViewDelegate = [[CDVUIWebViewDelegate alloc] initWithDelegate:self];
+#else
+        _webViewDelegate = [[CDVWebViewDelegate alloc] initWithDelegate:self];
+#endif
         _navigationDelegate = navigationDelegate;
         _statusBarStyle = statusBarStyle;
         [self createViews];
@@ -695,15 +673,14 @@
     if (!_browserOptions.fullscreen) {
         webViewBounds.size.height -= toolbarHeight;
     }
-    self.webView = [[WKWebView alloc] initWithFrame:webViewBounds];
+    self.webView = [[UIWebView alloc] initWithFrame:webViewBounds];
 
     self.webView.autoresizingMask = (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight);
 
     [self.view addSubview:self.webView];
     [self.view sendSubviewToBack:self.webView];
 
-    self.webView.navigationDelegate = self;
-
+    self.webView.delegate = _webViewDelegate;
     self.webView.backgroundColor = [UIColor whiteColor];
 
     self.webView.clearsContextBeforeDrawing = YES;
@@ -711,6 +688,7 @@
     self.webView.contentMode = UIViewContentModeScaleToFill;
     self.webView.multipleTouchEnabled = YES;
     self.webView.opaque = YES;
+    self.webView.scalesPageToFit = NO;
     self.webView.userInteractionEnabled = YES;
 
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
@@ -910,6 +888,8 @@
 
     self.view.backgroundColor = [CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.statusbar withKey:kThemeableBrowserPropColor withDefault:@"#ffffffff"]];
     [self.view addSubview:self.toolbar];
+    // [self.view addSubview:self.addressLabel];
+    // [self.view addSubview:self.spinner];
 }
 
 /**
@@ -1429,96 +1409,80 @@
     }
 }
 
-
 #pragma mark UIWebViewDelegate
 
-// These UIWebView delegates won't fire due to the switch to WKWebView.
+- (void)webViewDidStartLoad:(UIWebView*)theWebView
+{
+    // loading url, start spinner
 
-//- (void)webViewDidStartLoad:(UIWebView*)theWebView
-//{
-//    // loading url, start spinner
-//
-//    self.addressLabel.text = NSLocalizedString(@"Loading...", nil);
-//
-//    [self.spinner startAnimating];
-//
-//    return [self.navigationDelegate webViewDidStartLoad:theWebView];
-//}
+    self.addressLabel.text = NSLocalizedString(@"Loading...", nil);
 
-//- (BOOL)webView:(WKWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
-//{
-//    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
-//
-//    if (isTopLevelNavigation) {
-//        self.currentURL = request.URL;
-//    }
-//
-//    [self updateButtonDelayed:theWebView];
-//
-//    return [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
-//}
+    [self.spinner startAnimating];
 
-//- (void)webViewDidFinishLoad:(UIWebView*)theWebView
-//{
-//    // update url, stop spinner, update back/forward
-//
-//    self.addressLabel.text = [self.currentURL absoluteString];
-//    [self updateButton:theWebView];
-//
-//    if (self.titleLabel && _browserOptions.title
-//            && !_browserOptions.title[kThemeableBrowserPropStaticText]
-//            && [self getBoolFromDict:_browserOptions.title withKey:kThemeableBrowserPropShowPageTitle]) {
-//        // Update title text to page title when title is shown and we are not
-//        // required to show a static text.
-//
-//        [self.webView evaluateJavaScript:@"document.title" completionHandler:^(NSString *result, NSError *error) {
-//            self.titleLabel.text = result;
-//        }];
-//        //self.titleLabel.text = [self.webView stringByEvaluatingJavaScriptFromString:@"document.title"];
-//    }
-//
-//    [self.spinner stopAnimating];
-//
-//    // Work around a bug where the first time a PDF is opened, all UIWebViews
-//    // reload their User-Agent from NSUserDefaults.
-//    // This work-around makes the following assumptions:
-//    // 1. The app has only a single Cordova Webview. If not, then the app should
-//    //    take it upon themselves to load a PDF in the background as a part of
-//    //    their start-up flow.
-//    // 2. That the PDF does not require any additional network requests. We change
-//    //    the user-agent here back to that of the CDVViewController, so requests
-//    //    from it must pass through its white-list. This *does* break PDFs that
-//    //    contain links to other remote PDF/websites.
-//    // More info at https://issues.apache.org/jira/browse/CB-2225
-//    __block BOOL isPDF;
-//    [theWebView evaluateJavaScript:@"document.body==null" completionHandler:^(NSString *result, NSError *error) {
-//        if([result isEqualToString:@"true"]) {
-//            isPDF = true;
-//        } else {
-//            isPDF = false;
-//        }
-//    }];
-//
-//    //BOOL isPDF = [@"true" isEqualToString :[theWebView stringByEvaluatingJavaScriptFromString:@"document.body==null"]];
-//    if (isPDF) {
-//        [CDVUserAgentUtil setUserAgent:_prevUserAgent lockToken:_userAgentLockToken];
-//    }
-//
-//    //[self.navigationDelegate webViewDidFinishLoad:theWebView];
-//}
-//
-//- (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
-//{
-//    [self updateButton:theWebView];
-//
-//    [self.spinner stopAnimating];
-//
-//    self.addressLabel.text = NSLocalizedString(@"Load Error", nil);
-//
-//    [self.navigationDelegate webView:theWebView didFailLoadWithError:error];
-//}
+    return [self.navigationDelegate webViewDidStartLoad:theWebView];
+}
 
-- (void)updateButton:(WKWebView*)theWebView
+- (BOOL)webView:(UIWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
+{
+    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
+
+    if (isTopLevelNavigation) {
+        self.currentURL = request.URL;
+    }
+
+    [self updateButtonDelayed:theWebView];
+
+    return [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
+}
+
+- (void)webViewDidFinishLoad:(UIWebView*)theWebView
+{
+    // update url, stop spinner, update back/forward
+
+    self.addressLabel.text = [self.currentURL absoluteString];
+    [self updateButton:theWebView];
+
+    if (self.titleLabel && _browserOptions.title
+            && !_browserOptions.title[kThemeableBrowserPropStaticText]
+            && [self getBoolFromDict:_browserOptions.title withKey:kThemeableBrowserPropShowPageTitle]) {
+        // Update title text to page title when title is shown and we are not
+        // required to show a static text.
+        self.titleLabel.text = [self.webView stringByEvaluatingJavaScriptFromString:@"document.title"];
+    }
+
+    [self.spinner stopAnimating];
+
+    // Work around a bug where the first time a PDF is opened, all UIWebViews
+    // reload their User-Agent from NSUserDefaults.
+    // This work-around makes the following assumptions:
+    // 1. The app has only a single Cordova Webview. If not, then the app should
+    //    take it upon themselves to load a PDF in the background as a part of
+    //    their start-up flow.
+    // 2. That the PDF does not require any additional network requests. We change
+    //    the user-agent here back to that of the CDVViewController, so requests
+    //    from it must pass through its white-list. This *does* break PDFs that
+    //    contain links to other remote PDF/websites.
+    // More info at https://issues.apache.org/jira/browse/CB-2225
+    BOOL isPDF = [@"true" isEqualToString :[theWebView stringByEvaluatingJavaScriptFromString:@"document.body==null"]];
+    if (isPDF) {
+        [CDVUserAgentUtil setUserAgent:_prevUserAgent lockToken:_userAgentLockToken];
+    }
+
+    [self.navigationDelegate webViewDidFinishLoad:theWebView];
+}
+
+- (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
+{
+    [self updateButton:theWebView];
+
+    [self.spinner stopAnimating];
+
+    self.addressLabel.text = NSLocalizedString(@"Load Error", nil);
+
+    [self.navigationDelegate webView:theWebView didFailLoadWithError:error];
+}
+
+- (void)updateButton:(UIWebView*)theWebView
 {
     if (self.backButton) {
         self.backButton.enabled = _browserOptions.backButtonCanClose || theWebView.canGoBack;
@@ -1527,10 +1491,6 @@
     if (self.forwardButton) {
         self.forwardButton.enabled = theWebView.canGoForward;
     }
-}
-
-static void extracted(CDVThemeableBrowserViewController *object, WKWebView *theWebView) {
-    [object updateButton:theWebView];
 }
 
 /**
@@ -1543,10 +1503,10 @@ static void extracted(CDVThemeableBrowserViewController *object, WKWebView *theW
  * will have to depend on the back and forward button to give us hints when to
  * change button states.
  */
-- (void)updateButtonDelayed:(WKWebView*)theWebView
+- (void)updateButtonDelayed:(UIWebView*)theWebView
 {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        extracted(self, theWebView);
+        [self updateButton:theWebView];
     });
 }
 

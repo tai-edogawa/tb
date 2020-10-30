@@ -20,16 +20,12 @@
 #import <Cordova/CDVPlugin.h>
 #import <Cordova/CDVInvokedUrlCommand.h>
 #import <Cordova/CDVScreenOrientationDelegate.h>
-#import <WebKit/WebKit.h>
-#import <UIKit/UIKit.h>
-#import "CDVWKWebViewUIDelegate.h"
 
-//#ifdef __CORDOVA_4_0_0
-//    #import <Cordova/CDVUIWebViewDelegate.h>
-//#else
-//    #import <CDVWKWebViewUIDelegate.h>
-//    //#import <Cordova/CDVWebViewDelegate.h>
-//#endif
+#ifdef __CORDOVA_4_0_0
+    #import <Cordova/CDVUIWebViewDelegate.h>
+#else
+    #import <Cordova/CDVWebViewDelegate.h>
+#endif
 
 @interface CDVThemeableBrowserOptions : NSObject {}
 
@@ -66,7 +62,7 @@
 
 @class CDVThemeableBrowserViewController;
 
-@interface CDVThemeableBrowser : CDVPlugin <WKNavigationDelegate> {
+@interface CDVThemeableBrowser : CDVPlugin {
     BOOL _injectedIframeBridge;
 }
 
@@ -84,27 +80,23 @@
 
 @end
 
-@interface CDVThemeableBrowserViewController : UIViewController <WKNavigationDelegate,CDVScreenOrientationDelegate, UIActionSheetDelegate>{
+@interface CDVThemeableBrowserViewController : UIViewController <UIWebViewDelegate, CDVScreenOrientationDelegate, UIActionSheetDelegate>{
     @private
     NSString* _userAgent;
     NSString* _prevUserAgent;
     NSInteger _userAgentLockToken;
     UIStatusBarStyle _statusBarStyle;
     CDVThemeableBrowserOptions *_browserOptions;
-
-//#ifdef __CORDOVA_4_0_0
-////    kCDVWebViewEngineWKUIDelegate* _webViewDelegate;
-////    kCDVWebViewEngineWKNavigationDelegate * _webNavigationDelegate;
-////    CDVUIWebViewDelegate* _webViewDelegate;
-////#else
-////    kCDVWebViewEngineWKUIDelegate* _webViewDelegate;
-////    kCDVWebViewEngineWKNavigationDelegate * _webNavigationDelegate;
-////    //CDVWebViewDelegate* _webViewDelegate;
-//#endif
+    
+#ifdef __CORDOVA_4_0_0
+    CDVUIWebViewDelegate* _webViewDelegate;
+#else
+    CDVWebViewDelegate* _webViewDelegate;
+#endif
     
 }
 
-@property (nonatomic, strong) IBOutlet WKWebView* webView;
+@property (nonatomic, strong) IBOutlet UIWebView* webView;
 @property (nonatomic, strong) IBOutlet UIButton* closeButton;
 @property (nonatomic, strong) IBOutlet UILabel* addressLabel;
 @property (nonatomic, strong) IBOutlet UILabel* titleLabel;
